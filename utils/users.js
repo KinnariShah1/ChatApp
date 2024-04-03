@@ -28,9 +28,25 @@ function getRoomUsers(room){
     return users.filter(user => user.room === room);
 }
 
+// Add user's audio data
+function addUserAudio(id, audioData) {
+    const user = getCurrentUser(id);
+    if (user) {
+        user.audioData = audioData;
+    }
+}
+
+// Get user's audio data
+function getUserAudio(id) {
+    const user = getCurrentUser(id);
+    return user ? user.audioData : null;
+}
+
 module.exports = {
     userJoin,
     getCurrentUser, 
     userLeave,
-    getRoomUsers
+    getRoomUsers,
+    addUserAudio,
+    getUserAudio
 }
