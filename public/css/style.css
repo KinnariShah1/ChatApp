@@ -197,6 +197,14 @@ a {
 	width: 100%;
 }
 
+/* Add this CSS to your style.css file */
+.chat-messages img {
+	max-width: 100%;
+	height: auto;
+	max-height: 200px; /* Set the maximum height for consistency */
+  }
+  
+
 @media (max-width: 700px) {
 	.chat-main {
 		display: block;

@@ -1,155 +1,122 @@
-// const path = require('path');
-// const http = require('http');
-// const express = require("express");
-// const socketio = require('socket.io');
-// const formatMessage = require('./utils/messages');
-// const {userJoin, getCurrentUser, userLeave, getRoomUsers} = require('./utils/users');
-
-// const app=express();
-// const server = http.createServer(app);
-// const io = socketio(server);
-
-// //Set static folder
-// app.use(express.static(path.join(__dirname,'public')));
-
-// const botName = 'ChatApp Bot';
-
-// // Run when client connects
-// io.on('connection',socket =>{
-//     socket.on('joinRoom', ({ username, room}) => {
-//         const user = userJoin(socket.id, username, room);
-
-//         socket.join(user.room);
-
-//         // Emit a welcome message to the only user connecting
-//         socket.emit('message', formatMessage(botName,'Welcome to Chatcord!'));
-
-//         // Broadcast when a user connects (emit to everyone except the user)
-//         socket.broadcast.to(user.room).emit('message', formatMessage(botName, `${user.username} has joined the chat`));
-
-//         // Send users and room info
-//         io.to(user.room).emit('roomUsers', {
-//             room: user.room,
-//             users: getRoomUsers(user.room)
-//         })
-//     })
-
-//     // Listen for chatMessage
-//     socket.on('chatMessage', msg => {
-//         const user = getCurrentUser(socket.id);
-
-//         io.to(user.room).emit('message', formatMessage(user.username, msg));
-//     })
-
-//     // Listen for audioMessage
-//     // socket.on('audioMessage', audioData => {
-//     //     const user = getCurrentUser(socket.id);
-
-//     //     // Broadcast the audio message to all users in the room
-//     //     io.to(user.room).emit('audioMessage', audioData);
-//     // })
-
-//     // Listen for audioMessage
-// socket.on('audioMessage', audioData => {
-//     const user = getCurrentUser(socket.id);
-
-//     // Convert the received ArrayBuffer to a Blob
-//     const audioBlob = new Blob([audioData], { type: 'audio/webm;codecs=opus' });
-
-//     // Broadcast the audio message to all users in the room
-//     io.to(user.room).emit('audioMessage', audioBlob);
-// });
-
-
-//     // Runs when client disconnects
-//     socket.on('disconnect', () => {
-//         const user = userLeave(socket.id);
-
-//         if(user){
-//             // Emit to everyone
-//             io.to(user.room).emit('message', formatMessage(botName, `${user.username} has left the chat`));
-//         }
-
-//         // Send users and room info
-//         io.to(user.room).emit('roomUsers', {
-//             room: user.room,
-//             users: getRoomUsers(user.room)
-//         })
-//     })
-
-// })
-// const PORT = 3000 || process.env.PORT;
-
-// server.listen(PORT, () => console.log(`Server running on Port ${PORT}`));
-
 const path = require('path');
 const http = require('http');
+const mongoose = require("mongoose")
 const express = require("express");
+const fs = require('fs');
 const socketio = require('socket.io');
 const formatMessage = require('./utils/messages');
-const { userJoin, getCurrentUser, userLeave, getRoomUsers } = require('./utils/users');
+const { userJoin, getCurrentUser, userLeave, getRoomUsers, addUserAudio, getUserAudio } = require('./utils/users');
+const { MongoClient } = require('mongodb');
 
 const app = express();
 const server = http.createServer(app);
 const io = socketio(server);
 
-// Set static folder
 app.use(express.static(path.join(__dirname, 'public')));
 
 const botName = 'ChatApp Bot';
+const users = {};
 
-// Run when client connects
+// mongoose.connect(process.env.MONGO_URL,{useNewUrlParser: true}).then(()=>{
+//     console.log("MongoDB Connected!")
+// }).catch((err)=>{
+//     console.log(err);
+// });
+
+// Connect to MongoDB
+// const client = new MongoClient(process.env.MONGO_URL, { useNewUrlParser: true, useUnifiedTopology: true });
+// client.connect()
+//     .then(() => console.log('Connected to MongoDB'))
+//     .catch(err => console.error('Error connecting to MongoDB:', err));
+
+// Database and collection names
+// const dbName = 'chatdb';
+// const collectionName = 'messages';
+
 io.on('connection', socket => {
     socket.on('joinRoom', ({ username, room }) => {
         const user = userJoin(socket.id, username, room);
 
+                // Check if the users object is empty
+                // if (Object.keys(users).length === 0) {
+                //     console.log('The users object is empty.');
+                // } else {
+                    console.log('The users object is not empty.');
+                    console.log('userssss:',user);
+                // }
+
+        users[socket.id] = {username, room};
+        // console.log(users);
+
         socket.join(user.room);
 
-        // Emit a welcome message to the only user connecting
         socket.emit('message', formatMessage(botName, 'Welcome to Chatcord!'));
 
-        // Broadcast when a user connects (emit to everyone except the user)
         socket.broadcast.to(user.room).emit('message', formatMessage(botName, `${user.username} has joined the chat`));
 
-        // Send users and room info
+    
         io.to(user.room).emit('roomUsers', {
             room: user.room,
             users: getRoomUsers(user.room)
         });
     });
 
-    // Listen for chatMessage
-    socket.on('chatMessage', msg => {
-        const user = getCurrentUser(socket.id);
-        io.to(user.room).emit('message', formatMessage(user.username, msg));
+    socket.on('imageMessage', ({ userId, imageData }) => {
+        const user = getCurrentUser(userId);
+        if (user) {
+            io.to(user.room).emit('imageMessage', { userId, imageData });
+        } else {
+            console.error('User information not found for image message:', userId);
+        }
     });
 
-// Listen for audioMessage
-socket.on('audioMessage', audioBlob => {
-    // Create a new audio element to play the received audio
-    const audioPlayer = new Audio(URL.createObjectURL(audioBlob));
-    audioPlayer.controls = true; // Add controls to the audio element
-    document.body.appendChild(audioPlayer); // Append the audio element to the DOM
-    audioPlayer.play(); // Play the audio
-    
-    // Log the received audio message
-    console.log("Received audio message:", audioBlob);
-});
+    socket.on('audioMessage', ({ socketId, audioBuffer }) => {
+        const user = getCurrentUser(socketId);
+        console.log("room: ", audioBuffer);
+        if (user) {
+            console.log("room: ", user.room);
+            addUserAudio(socketId, audioBuffer); 
+            console.log("room: ", audioBuffer);
+            if (audioBuffer) {
+                const audioBlob = Buffer.from(audioBuffer);
+
+            io.to(user.room).emit('audioMessage', { userId: socketId, audioBlob });
+            console.log("Broadcasted audio message:", audioBlob);
+            }
+        } else {
+            console.error('User not found for audio message:', socketId);
+        }
+    });
 
 
+    socket.on('chatMessage', async msg => {
+        const user = getCurrentUser(socket.id);
+        // io.to(user.room).emit('message', formatMessage(user.username, msg));
+        if (user) {
+            io.to(user.room).emit('message', formatMessage(user.username, msg));
+            // const message = formatMessage(user.username, msg);
+            // const messagesCollection = client.db(dbName).collection(collectionName);
+            // try {
+            //     await messagesCollection.insertOne(message);
+            // } catch (err) {
+            //     console.error('Error inserting message into MongoDB:', err);
+            // }
+        } else {
+            console.error('User information not found for socket:', socket.id);
+        }
+    });
 
-    // Runs when client disconnects
     socket.on('disconnect', () => {
         const user = userLeave(socket.id);
 
         if (user) {
-            // Emit to everyone
             io.to(user.room).emit('message', formatMessage(botName, `${user.username} has left the chat`));
-            // Send users and room info
             io.to(user.room).emit('roomUsers', {
                 room: user.room,
                 users: getRoomUsers(user.room)
             });
+
+            delete users[socket.id];
         }
     });
 });
